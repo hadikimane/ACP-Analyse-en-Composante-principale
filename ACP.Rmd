@@ -1,0 +1,169 @@
+---
+title: "ACP"
+author: "Imane HADIK"
+output: pdf_document
+---
+# ACP sur données réelles environnementales
+
+## Préparation de la data et calcul statistique
+
+Pour appliquer une ACP, nous avons besoin des données quantitatives. Pour cela, nous allons supprimer de notre base de données les variables qualitatives,et remplacer les valeurs manquantes par la moyenne de la variable associée. Après importation de la nouvelle base de données,nous passons au traitement statistique sur l'ensemble de l'échantillon en calculant la matrice variance-covariance, les vecteurs écart type, la moyenne et la médiane des variables.
+```{r}
+library(readxl)
+data<-read_excel("newdata.xlsx")
+##Résultats statistiques
+print("matrice var-cov")
+Var_cov<-var(data)
+Var_cov
+# ecart type data
+print("vecteur ecart type")
+ecart_type<-sqrt(diag(Var_cov))
+ecart<-c(ecart_type)#vecteur ecart type
+ecart
+##moyenne
+print("moyenne de chaque variable explicative")
+mean <- c(colMeans(data))
+mean
+#médiane
+print("médiane")
+mediane<-rep(0,14)
+names(mediane)<-c("B","T","E","X","9_ane","10_ane","13_ane","14_ane","1_M_2_PA","BTM","FormicAcid","aceticacid","NonaDecanoicAc","Tot_OcNoDecana")
+for (i in 1:14){
+  mediane[i]<-median(as.numeric(unlist(data[,i])))
+}
+mediane
+```
+## Calcul de la corrélation entre les variables, et graphique de corrélation
+
+On vérifie dans cette étape que nos données sont adaptées à la réduction de dimension. Pour ce faire, on se base premièrement sur le graphique des corrélations et ensuite sur les deux tests KMO et Bartlett, pour confirmer qu'il existe une forte corrélation entre les variables  et que nous pouvons donc faire une ACP.
+```{r }
+##correlation
+print("matrice de corrélation")
+mcor<-cor(data)
+mcor
+library(corrplot)
+print("graphe des corrélations")
+corrplot(mcor, method="circle", type = "upper", number.cex = 0.6, tl.cex = 0.7)
+#test KMO et Bartlett
+library(psych)
+KMO(mcor)
+cortest.bartlett(mcor)
+```
+D'après le graphique de corrélation ci-dessus, nous remarquons qu'il y a une forte corrélation entre les variables. Nous pouvons confirmer ce résultat à l'aide des deux tests KMO (une valeur de 0.8>>0.5) et bartlette(p-value très significative =0). Nous pouvons procéder alors par une ACP.
+
+## Centrer et réduire les données pour faire une ACP
+
+Nous remarquons que nos données sont dans des ordres de grandeurs différentes.Il est nécessaire alors de centrer réduire les données avant d'effectuer une ACP.
+
+```{r}
+ Xcentre<- data.frame()
+ for(i in 1:14){
+   for(j in 1:139){
+     Xcentre[j,i] <- (data[j,i] - mean[i])/ecart_type[i]} #our new data
+ }
+```
+
+## Réduction de dimension et ACP 
+
+Nous cherchons d'abord le nombre optimal d'axes à extraire. On sait que
+la recherche d’axes portant le maximum d’inertie équivaut à la construction de nouvelles variables (auxquelles sont associés ces axes) de variance maximale.
+Nous effectuons alors un changement de repère  où le premier axe apporte le plus possible d’inertie totale du nuage, le deuxième axe le plus possible d’inertie non prise en compte par le premier axe, et ainsi de suite. l'Inertie totale = la somme des variances des variables étudiées, dans notre cas il s'agit de variables centrées réduites donc l'inertie totale=p=14. Nous pouvons vérifier facilement sur R que la somme des valeurs propres = 14
+```{r}
+#facteurs à extraire dans l'ACP
+library(paran)
+print("Graphique des valeurs propres et nombre optimal de facteurs à extraire")
+P<-paran(x= Xcentre,cfa = FALSE,graph = TRUE,color = c("black","red","blue"),centile = 95)
+val.extr<- P$Retained #nombre de facteurs optimal à extraire
+valeursP<-P$Ev##valeurs propres
+print("Valeurs propres")
+valeursP
+valeursPadj<-P$AdjEv##valeurs propres ajustées
+print("somme des valeurs propres")
+sum(valeursP)
+```
+Si nous optons pour la méthode basée sur le critère de Kaiser, nous retenons les axes associés à des valeurs propres supérieurs à 1. Par conséquent, les trois premiers axes sont retenus.
+Par ailleurs en utilisant la fonction paran(), nous obtenons que 2 axes à extraire (en se basant sur les valeurs propres ajustées).Nous pouvons confirmer ce résultat à l'aide du critère du coude qui est une autre méthode permettant la détermination du nombre optimal des axes, Le graphe ci-dessous nous indique que seulement les 2 premiers axes sont retenus.
+```{r}
+library( factoextra)
+library( ggrepel)
+library( ggplot2)
+acp<-prcomp(Xcentre,scale=TRUE)#acp
+print("Diagramme des valeurs propres")
+fviz_eig(acp, xlab="dimensions",ylab="pourcentage de la variance expliqué")
+```
+Ensuite, nous obtenons  une matrice qui illustre les coordonnées factorielles des variables. Cela nous aide à savoir quelles sont les variables qui participent le plus à la formation d’un axe.
+```{r}
+##coordonnées
+print("Coordonnées factorielles des variables dans les composantes retenues")
+acp$rotation[,1:2]
+```
+## Représentation des individus et des variables dans le premier plan factoriel
+Nous pouvons représenter les individus et les variables dans le premier plan factoriel.Les deux graphes ci-dessous illustrent ces résultats:
+
+```{r}
+biplot(acp)
+cat("\n\n")
+```
+## Qualité de représentation des variables
+A partir du cercle de corrélation suivant, nous pouvons affirmer les résultats de corrélation des variables vu précedemment et voir la contribution de chaque variable dans la constitution des composantes principales. On observe que
+*les varibales : X, 9_ane,1_M_2_PA, 10_ane et E sont les plus proches du bord du cercle de corrélation et du 1er axe donc ils contribuent le plus dans la constitution de la première composantes. Les variables qui contribuent le moins dans cet axe sont : aceticacid,FormicAcid, NonaDecanoicAc.
+
+*les variables B,13_ane,14_ane,Tot_OcNoDecana, FormicAcid étant regroupées dans le même sens, ces variables sont corrélées positivement,et elles contribuent fortement et positivement à la construction des deux axes et donc elles sont bien représentées dans les deux axes.
+
+* les variables BTM,X,E,1_M_2_PA regroupées dans le même sens sont fortement corrélées, ces variables sont corrélés potivement avec le premier axe et négativement avec le deuxième axe. Dans ce dernier, nous constatons que les variables : 9_ane (elle est ~perpendiculaire ),T et aceticacid sont mal représentées représentées.
+
+```{r}
+##Qualité de représentation des variables
+print("Cercle de corrélation")
+fviz_pca_var(acp,col.var = "contrib", radient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),repel = TRUE)
+```
+
+La qualité de représentation des variables sur le plan de l’ACP s’appelle cos2 (cosinus carré). Un cos2 élevé indique une bonne représentation de la variable sur l' axe principal en question. Un faible cos2 indique que la variable n’est pas bien représentée par l'axe principal.
+Nou confirmons les résultats de cercle de corrélation par les 2 diagrammes ci-dessous, qui repérsentent les valeurs cos2 des variables sur les deux axes. Comme dernière remarque, la variable aceticacid est mal représentée dans les deux axes.
+```{r}
+fviz_cos2(acp, choice="var", axes = 1 )##Qualité de la représentation axe1
+fviz_cos2(acp, choice="var", axes = 2 )##Qualité de la représentation ax2
+```
+
+# Qualité de représentation des individus
+En utilisant le cos2 pour évaluer la réprésentation des individus dans les deux composantes principales, nous remarquons que :
+* Certaines individus(en vert ayant un cos2 le plus petit) sont mal représentés par les deux axes(ils sont proches de L'origine du plan).
+
+* L'individu 77 est un point aberrant.
+
+* Des individus qui sont bien représentés(positivement par exemple les individus 65,75,61,68,71) dans le côté droit du plan. Ces individus est lié positivement aux composés chimiques qui expliquent le mieux les deux axes et qui contribuent positivement à la construction des deux axes, parmi ces composés nous pouvons citer :B,13_ane,14_ane,Tot_OcNoDecana.
+
+* L'individu 54 ayant un cos2 moyennement élevé , est positivement représenté dans le premier axe et négativement représenté dans le deuxième axe . Cet individu est lié potivement aux composés chimiques : BTM,X,E,1_M_2_PA
+
+* les autres individus sont représentés fortement et négativement dans les deux axes.
+```{r}
+#qualité de représentation des indiv
+print("Représentation des individus dans le premier plan factoriel")
+fviz_pca_ind(acp ,col.ind = "cos2",gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),repel = TRUE)
+cat("\n\n")
+```
+On montre ci-dessous les diagrammes de cos2 pour les individus.
+
+```{r}
+fviz_cos2(acp, choice = "ind",axes = 2,top=50) ##1er axe visualisation de 50 parmi 139
+fviz_cos2(acp, choice = "ind",axes = 2,top=50)##2ème axe
+cat("\n\n")
+```
+Dans cette partie, nous avons essayé de regrouper les individus par 4 classes : en période d'été avant 'été_BF' et après 'été_CA' la mise en activités du site, et en période d'hiver avant'hiv_BF' et après'hiv_CA' la mise en activités du site. Dans notre data il y avait apparemment pas de données pour les indiv "été_BF". Nous visualisons ces classes dans les deux composantes principal.
+```{r}
+library(readxl)
+brut<-read_excel("TP4_covC1234_DS19_20.xlsx")
+#plot de été (avant/après), hiver(avant/après)
+p<- ifelse(brut$SAISON=="hiver"& brut$Campagne%in%c("BF2","BF3"),"hiv_BF",ifelse(brut$SAISON=="hiver"& brut$Campagne%in%c("CA1","CA2","CA3","CA4"),"hiv_CA",ifelse(brut$SAISON=="été"& brut$Campagne%in%c("BF2","BF3"),"été_BF","été_CA")))
+crd<- data.frame(PC1= acp$x[,1],PC2=acp$x[,2],period=p)
+ggplot(data= crd,mapping=aes(x=PC1, y=PC2, colour=p))+geom_point()
+```
+ 
+ * individus hiver_BF : nous avons vu dans la partie qualité des individus, ques ces individus ont un cos2 élevé ainsi qu'ils sont corrélés négativement avec les deux axes. Nous pouvons dire alors qu'en hiver et avant la mise en activité des site, on remarque pas la présence de composé chimiques.
+ 
+ * individus été_CA : On trouve que parmi ces individus, il y en a ceux qui sont proches de l'origine du plan factoriel (0,0) qui ont un cos2 faible et qui sont donc mal représentés dans ces deux axes, D'où l'absence des composés chimique.Mais pour les autres individus de cette classe, nous savons qu'ils sont lié aux composés chimiques B,13_ane,14_ane,Tot_OcNoDecana, et donc nous avons remarqué la présence de ces composés chimiques. 
+ 
+ * individus hiver_CA : de la même manière nous observons qu'il y a des individus qui ont cos2 élevé et d'autres non, et donc il y en a ceux avec qui on remarque la présence des composé chimiques et d'autres non. 
+ 
+Nous ne pouvons pas conclure pour les deux classes été_CA et hiver_CA Nous aurons besoin peut être d'autres variables pour bien interpréter ces individus.
+ 
